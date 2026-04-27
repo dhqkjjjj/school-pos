@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>校慶 POS - Firebase 專業版</title>
+    <title>校慶 POS - Firebase 修正版</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
@@ -83,7 +83,7 @@
 </div>
 
 <script>
-    // --- 已填入你的 Firebase 設定 ---
+    // --- 這次絕對正確的設定 ---
     const firebaseConfig = {
         apiKey: "AIzaSyDTqa6YKnXOSeuMkxcOVWK7cC8orklePGU",
         authDomain: "school-faee6.firebaseapp.com",
@@ -92,7 +92,7 @@
         messagingSenderId: "48853339335",
         appId: "1:48853339335:web:31eda5ea2618e79828c2e2",
         measurementId: "G-8Q4JSD8VB1",
-        databaseURL: "https://school-faee6-default-rtdb.firebaseio.com"
+        databaseURL: "https://school-faee6-default-rtdb.asia-southeast1.firebasedatabase.app"
     };
 
     firebase.initializeApp(firebaseConfig);
@@ -101,7 +101,6 @@
     let cart = { noodle: 0, tofu: 0 };
     let currentStock = { noodle: 200, tofu: 200 };
 
-    // 1. 監聽庫存
     db.ref('stock').on('value', (snapshot) => {
         const data = snapshot.val();
         if (data) {
@@ -109,12 +108,10 @@
             document.getElementById('stk-noodle').innerText = data.noodle;
             document.getElementById('stk-tofu').innerText = data.tofu;
         } else {
-            // 初始化庫存為 200
             db.ref('stock').set({ noodle: 200, tofu: 200 });
         }
     });
 
-    // 2. 監聽訂單
     db.ref('orders').on('value', (snapshot) => {
         const orders = [];
         snapshot.forEach(child => { orders.push({ key: child.key, ...child.val() }); });
@@ -156,14 +153,8 @@
     function submitOrder() {
         const orderId = Date.now().toString().slice(-4);
         const timestamp = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        
-        // 寫入雲端訂單與扣庫存
         db.ref('orders').push({ id: orderId, noodle: cart.noodle, tofu: cart.tofu, time: timestamp });
-        db.ref('stock').set({ 
-            noodle: currentStock.noodle - cart.noodle, 
-            tofu: currentStock.tofu - cart.tofu 
-        });
-
+        db.ref('stock').set({ noodle: currentStock.noodle - cart.noodle, tofu: currentStock.tofu - cart.tofu });
         cart = { noodle: 0, tofu: 0 };
         document.getElementById('qty-noodle').innerText = '0';
         document.getElementById('qty-tofu').innerText = '0';
@@ -175,7 +166,6 @@
         const nList = document.getElementById('list-noodle');
         const tList = document.getElementById('list-tofu');
         nList.innerHTML = ""; tList.innerHTML = "";
-
         orders.forEach(ord => {
             if (ord.noodle > 0) {
                 nList.innerHTML += `<div class="order-ticket noodle-ticket">單號 #${ord.id} [${ord.time}]<br><b>🍜 炒泡麵 x ${ord.noodle}</b><button class="btn-done" onclick="completeOrder('${ord.key}', 'noodle')">製作完成</button></div>`;
