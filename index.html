@@ -3,87 +3,88 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>校慶 POS - Firebase 修正版</title>
+    <title>校慶 POS - 安全防護版</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
         :root { --primary: #3498db; --secondary: #2ecc71; --accent: #e67e22; --danger: #e74c3c; --noodle: #f39c12; --tofu: #9b59b6; }
-        body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: #f0f2f5; margin: 0; padding: 10px; }
+        body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 10px; }
+        /* 密碼登入頁 */
+        #login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 90vh; }
+        .login-input { padding: 15px; font-size: 1.2rem; border-radius: 8px; border: 1px solid #ccc; width: 200px; text-align: center; margin-bottom: 15px; }
+        
+        /* 主程式內容 */
+        #main-content { display: none; } 
+        
         .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); min-height: 90vh; }
         .mode-nav { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 20px; }
         .mode-nav button { padding: 12px 5px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; background: #eee; }
         .mode-nav .active { background: var(--primary); color: white; }
         .item-card { border: 2px solid #f0f0f0; border-radius: 12px; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
         .btn-round { width: 40px; height: 40px; border-radius: 50%; border: none; font-size: 1.5rem; cursor: pointer; background: #eee; }
-        .qty-display { font-size: 1.3rem; font-weight: bold; min-width: 25px; text-align: center; }
         .order-ticket { padding: 15px; margin-bottom: 12px; border-radius: 10px; color: white; position: relative; }
         .noodle-ticket { background: var(--noodle); }
         .tofu-ticket { background: var(--tofu); }
-        .btn-done { width: 100%; margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.3); border: 1px solid white; color: white; border-radius: 5px; cursor: pointer; }
+        .btn-done { width: 100%; margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.3); border: 1px solid white; color: white; border-radius: 5px; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 100; }
         .modal-content { background: white; padding: 25px; border-radius: 15px; text-align: center; width: 80%; }
-        .status-dot { font-size: 0.8rem; text-align: center; margin-bottom: 10px; color: #7f8c8d; }
+        .status-dot { font-size: 0.8rem; text-align: center; margin-bottom: 10px; color: #7f8c8d; cursor: default; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="status-dot" id="conn-status">📡 正在連線至 Firebase...</div>
-    <div class="mode-nav">
-        <button id="nav-cashier" onclick="switchMode('cashier')" class="active">💰 收銀</button>
-        <button id="nav-k-noodle" onclick="switchMode('k-noodle')">🍜 麵區</button>
-        <button id="nav-k-tofu" onclick="switchMode('k-tofu')">🍧 豆花區</button>
+<div id="login-screen">
+    <h2>🔒 請輸入通行碼</h2>
+    <input type="password" id="pass-input" class="login-input" placeholder="請輸入密碼">
+    <button onclick="checkPass()" style="padding:10px 40px; background:var(--primary); color:white; border:none; border-radius:5px; font-weight:bold;">登入</button>
+</div>
+
+<div id="main-content">
+    <div class="container">
+        <div class="status-dot" id="conn-status" onclick="handleResetSecret()">📡 正在連線至 Firebase...</div>
+        <div class="mode-nav">
+            <button id="nav-cashier" onclick="switchMode('cashier')" class="active">💰 收銀</button>
+            <button id="nav-k-noodle" onclick="switchMode('k-noodle')">🍜 麵區</button>
+            <button id="nav-k-tofu" onclick="switchMode('k-tofu')">🍧 豆花區</button>
+        </div>
+
+        <div id="view-cashier">
+            <div class="item-card">
+                <div><div style="font-weight:bold;">🍜 炒泡麵 $65</div><div style="font-size:0.8rem; color:gray;">剩餘: <span id="stk-noodle">---</span></div></div>
+                <div style="display:flex; align-items:center;">
+                    <button class="btn-round" onclick="changeQty('noodle', -1)">-</button>
+                    <span id="qty-noodle" style="margin:0 15px; font-weight:bold;">0</span>
+                    <button class="btn-round" style="background:var(--primary); color:white;" onclick="changeQty('noodle', 1)">+</button>
+                </div>
+            </div>
+            <div class="item-card">
+                <div><div style="font-weight:bold;">🍧 豆花 $45</div><div style="font-size:0.8rem; color:gray;">剩餘: <span id="stk-tofu">---</span></div></div>
+                <div style="display:flex; align-items:center;">
+                    <button class="btn-round" onclick="changeQty('tofu', -1)">-</button>
+                    <span id="qty-tofu" style="margin:0 15px; font-weight:bold;">0</span>
+                    <button class="btn-round" style="background:var(--primary); color:white;" onclick="changeQty('tofu', 1)">+</button>
+                </div>
+            </div>
+            <div style="text-align:right; font-size:1.5rem; font-weight:bold; margin-bottom:15px; color:var(--danger);">總計: <span id="total-price">$0</span></div>
+            <button onclick="openConfirm()" style="width:100%; padding:18px; background:var(--secondary); color:white; border:none; border-radius:10px; font-size:1.2rem; font-weight:bold;">確認收錢送單</button>
+        </div>
+
+        <div id="view-k-noodle" style="display:none;"><h2>🍜 麵區待作</h2><div id="list-noodle"></div></div>
+        <div id="view-k-tofu" style="display:none;"><h2>🍧 豆花待作</h2><div id="list-tofu"></div></div>
     </div>
-
-    <div id="view-cashier">
-        <div class="item-card">
-            <div>
-                <div style="font-weight:bold; font-size:1.1rem;">🍜 炒泡麵 $65</div>
-                <div style="font-size:0.85rem; color:gray;">剩餘庫存: <span id="stk-noodle">---</span></div>
-            </div>
-            <div style="display:flex; align-items:center;">
-                <button class="btn-round" onclick="changeQty('noodle', -1)">-</button>
-                <div class="qty-display" id="qty-noodle">0</div>
-                <button class="btn-round" style="background:var(--primary); color:white;" onclick="changeQty('noodle', 1)">+</button>
-            </div>
-        </div>
-
-        <div class="item-card">
-            <div>
-                <div style="font-weight:bold; font-size:1.1rem;">🍧 豆花 $45</div>
-                <div style="font-size:0.85rem; color:gray;">剩餘庫存: <span id="stk-tofu">---</span></div>
-            </div>
-            <div style="display:flex; align-items:center;">
-                <button class="btn-round" onclick="changeQty('tofu', -1)">-</button>
-                <div class="qty-display" id="qty-tofu">0</div>
-                <button class="btn-round" style="background:var(--primary); color:white;" onclick="changeQty('tofu', 1)">+</button>
-            </div>
-        </div>
-
-        <div style="margin:20px 0; border-top:1px solid #eee; padding-top:15px;">
-            <div style="display:flex; justify-content:space-between; font-size:1.5rem; font-weight:bold;">
-                <span>總金額</span>
-                <span id="total-price" style="color:var(--danger);">$0</span>
-            </div>
-            <button onclick="openConfirm()" style="width:100%; margin-top:15px; padding:18px; background:var(--secondary); color:white; border:none; border-radius:10px; font-size:1.3rem; font-weight:bold; cursor:pointer;">確認結帳送單</button>
-        </div>
-    </div>
-
-    <div id="view-k-noodle" style="display:none;"><h2 style="color:var(--noodle); text-align:center;">🍜 麵區待作清單</h2><div id="list-noodle"></div></div>
-    <div id="view-k-tofu" style="display:none;"><h2 style="color:var(--tofu); text-align:center;">🍧 豆花待作清單</h2><div id="list-tofu"></div></div>
 </div>
 
 <div id="confirmModal" class="modal">
     <div class="modal-content">
-        <h3>💰 確認收錢</h3>
-        <p id="modal-detail" style="font-size:1.2rem; line-height:1.6;"></p>
-        <button onclick="submitOrder()" style="width:100%; padding:15px; background:var(--secondary); color:white; border:none; border-radius:8px; font-size:1.1rem; font-weight:bold;">確認送出</button>
-        <button onclick="closeConfirm()" style="width:100%; margin-top:10px; background:none; border:none; color:gray;">返回修改</button>
+        <h3>確認訂單</h3>
+        <p id="modal-detail"></p>
+        <button onclick="submitOrder()" style="width:100%; padding:15px; background:var(--secondary); color:white; border:none; border-radius:5px;">確認送出</button>
+        <button onclick="closeConfirm()" style="width:100%; margin-top:10px; border:none; background:none; color:gray;">取消</button>
     </div>
 </div>
 
 <script>
-    // --- 這次絕對正確的設定 ---
+    // Firebase 設定 (使用你的專案資訊)
     const firebaseConfig = {
         apiKey: "AIzaSyDTqa6YKnXOSeuMkxcOVWK7cC8orklePGU",
         authDomain: "school-faee6.firebaseapp.com",
@@ -94,31 +95,62 @@
         measurementId: "G-8Q4JSD8VB1",
         databaseURL: "https://school-faee6-default-rtdb.asia-southeast1.firebasedatabase.app"
     };
-
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
     let cart = { noodle: 0, tofu: 0 };
     let currentStock = { noodle: 200, tofu: 200 };
+    let resetClicks = 0;
 
-    db.ref('stock').on('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            currentStock = data;
-            document.getElementById('stk-noodle').innerText = data.noodle;
-            document.getElementById('stk-tofu').innerText = data.tofu;
+    // 密碼檢查
+    function checkPass() {
+        if (document.getElementById('pass-input').value === '123') {
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('main-content').style.display = 'block';
+            startApp();
         } else {
-            db.ref('stock').set({ noodle: 200, tofu: 200 });
+            alert('密碼錯誤！');
         }
-    });
+    }
 
-    db.ref('orders').on('value', (snapshot) => {
-        const orders = [];
-        snapshot.forEach(child => { orders.push({ key: child.key, ...child.val() }); });
-        renderKitchen(orders);
-        document.getElementById('conn-status').innerText = "🟢 雲端同步中 (跨裝置已啟用)";
-    });
+    function startApp() {
+        db.ref('stock').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                currentStock = data;
+                document.getElementById('stk-noodle').innerText = data.noodle;
+                document.getElementById('stk-tofu').innerText = data.tofu;
+            } else {
+                db.ref('stock').set({ noodle: 200, tofu: 200 });
+            }
+        });
 
+        db.ref('orders').on('value', (snapshot) => {
+            const orders = [];
+            snapshot.forEach(child => { orders.push({ key: child.key, ...child.val() }); });
+            renderKitchen(orders);
+            document.getElementById('conn-status').innerText = "🟢 雲端同步中";
+        });
+    }
+
+    function handleResetSecret() {
+        resetClicks++;
+        if (resetClicks >= 5) {
+            const pw = prompt("請輸入管理員密碼以重製數據：");
+            if (pw === '123') {
+                if (confirm("確定要清空所有訂單並恢復庫存為 200 嗎？")) {
+                    db.ref('orders').remove();
+                    db.ref('stock').set({ noodle: 200, tofu: 200 });
+                    alert("重製成功！");
+                }
+            } else if (pw !== null) {
+                alert("密碼錯誤！");
+            }
+            resetClicks = 0;
+        }
+    }
+
+    // 以下為原有的功能逻辑
     function switchMode(mode) {
         ['view-cashier', 'view-k-noodle', 'view-k-tofu'].forEach(id => document.getElementById(id).style.display = 'none');
         ['nav-cashier', 'nav-k-noodle', 'nav-k-tofu'].forEach(id => document.getElementById(id).classList.remove('active'));
@@ -144,7 +176,7 @@
 
     function openConfirm() {
         if (cart.noodle === 0 && cart.tofu === 0) return;
-        document.getElementById('modal-detail').innerHTML = `炒泡麵 x ${cart.noodle}<br>豆花 x ${cart.tofu}<br><b>應收金額：${calculate()} 元</b>`;
+        document.getElementById('modal-detail').innerHTML = `麵 x ${cart.noodle}, 豆花 x ${cart.tofu}<br><b>總金額：${calculate()} 元</b>`;
         document.getElementById('confirmModal').style.display = 'flex';
     }
 
@@ -167,25 +199,18 @@
         const tList = document.getElementById('list-tofu');
         nList.innerHTML = ""; tList.innerHTML = "";
         orders.forEach(ord => {
-            if (ord.noodle > 0) {
-                nList.innerHTML += `<div class="order-ticket noodle-ticket">單號 #${ord.id} [${ord.time}]<br><b>🍜 炒泡麵 x ${ord.noodle}</b><button class="btn-done" onclick="completeOrder('${ord.key}', 'noodle')">製作完成</button></div>`;
-            }
-            if (ord.tofu > 0) {
-                tList.innerHTML += `<div class="order-ticket tofu-ticket">單號 #${ord.id} [${ord.time}]<br><b>🍧 豆花 x ${ord.tofu}</b><button class="btn-done" onclick="completeOrder('${ord.key}', 'tofu')">製作完成</button></div>`;
-            }
+            if (ord.noodle > 0) nList.innerHTML += `<div class="order-ticket noodle-ticket">#${ord.id} [${ord.time}]<br><b>🍜 麵 x ${ord.noodle}</b><button class="btn-done" onclick="completeOrder('${ord.key}', 'noodle')">完成</button></div>`;
+            if (ord.tofu > 0) tList.innerHTML += `<div class="order-ticket tofu-ticket">#${ord.id} [${ord.time}]<br><b>🍧 豆花 x ${ord.tofu}</b><button class="btn-done" onclick="completeOrder('${ord.key}', 'tofu')">完成</button></div>`;
         });
     }
 
     function completeOrder(key, type) {
-        db.ref('orders/' + key).once('value', snapshot => {
-            const val = snapshot.val();
-            if (!val) return;
-            const update = {};
-            update[type] = 0;
-            db.ref('orders/' + key).update(update).then(() => {
-                db.ref('orders/' + key).once('value', s => {
-                    const v = s.val();
-                    if (v.noodle === 0 && v.tofu === 0) db.ref('orders/' + key).remove();
+        db.ref('orders/' + key).once('value', s => {
+            const v = s.val(); if (!v) return;
+            const up = {}; up[type] = 0;
+            db.ref('orders/' + key).update(up).then(() => {
+                db.ref('orders/' + key).once('value', s2 => {
+                    const v2 = s2.val(); if (v2.noodle === 0 && v2.tofu === 0) db.ref('orders/' + key).remove();
                 });
             });
         });
