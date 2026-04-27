@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>校慶分流點餐系統</title>
+    <style>
+        :root { --primary: #3498db; --secondary: #2ecc71; --accent: #e67e22; --danger: #e74c3c; --noodle: #f39c12; --tofu: #9b59b6; }
+        body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: #f0f2f5; margin: 0; padding: 10px; }
+        .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); min-height: 90vh; }
+        
+        /* 模式切換導覽 */
+        .mode-nav { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+        .mode-nav button { padding: 12px 5px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; background: #eee; font-size: 0.9rem; }
+        .mode-nav .active { background: var(--primary); color: white; }
+
+        /* 商品卡片 */
+        .item-card { border: 2px solid #f0f0f0; border-radius: 12px; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .item-name { font-size: 1.2rem; font-weight: bold; }
+        .item-stock { font-size: 0.85rem; color: #7f8c8d; margin-top: 4px; }
+        
+        /* 加減按鈕 */
+        .counter-group { display: flex; align-items: center; gap: 15px; }
+        .btn-round { width: 40px; height: 40px; border-radius: 50%; border: none; font-size: 1.5rem; cursor: pointer; background: #eee; display: flex; align-items: center; justify-content: center; }
+        .btn-plus { background: var(--primary); color: white; }
+        .qty-display { font-size: 1.5rem; font-weight: bold; min-width: 25px; text-align: center; }
+
+        /* 結帳區 */
+        .footer { margin-top: 20px; border-top: 2px solid #eee; padding-top: 15px; }
+        .total-box { display: flex; justify-content: space-between; font-size: 1.5rem; font-weight: bold; margin-bottom: 15px; color: var(--danger); }
+        .btn-checkout { width: 100%; padding: 18px; background: var(--secondary); color: white; border: none; border-radius: 10px; font-size: 1.3rem; font-weight: bold; cursor: pointer; }
+
+        /* 內場單據樣式 */
+        .order-ticket { padding: 15px; margin-bottom: 12px; border-radius: 10px; color: white; position: relative; animation: popIn 0.3s ease; }
+        .noodle-ticket { background: var(--noodle); border-left: 8px solid #d35400; }
+        .tofu-ticket { background: var(--tofu); border-left: 8px solid #8e44ad; }
+        .ticket-header { display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 10px; opacity: 0.9; }
+        .ticket-content { font-size: 1.8rem; font-weight: bold; text-align: center; }
+        .btn-done { width: 100%; margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.3); border: 1px solid white; color: white; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        
+        @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        
+        /* 彈窗 */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 100; }
+        .modal-content { background: white; padding: 25px; border-radius: 15px; text-align: center; width: 80%; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="mode-nav">
+        <button id="nav-cashier" onclick="switchMode('cashier')" class="active">💰 收銀</button>
+        <button id="nav-k-noodle" onclick="switchMode('k-noodle')">🍜 麵區</button>
+        <button id="nav-k-tofu" onclick="switchMode('k-tofu')">🍧 豆花區</button>
+    </div>
+
+    <div id="view-cashier">
+        <div class="item-card">
+            <div>
+                <div class="item-name">🍜 炒泡麵 $65</div>
+                <div class="item-stock">剩餘: <span id="stk-noodle">200</span></div>
+            </div>
+            <div class="counter-group">
+                <button class="btn-round" onclick="changeQty('noodle', -1)">-</button>
+                <div class="qty-display" id="qty-noodle">0</div>
+                <button class="btn-round btn-plus" onclick="changeQty('noodle', 1)">+</button>
+            </div>
+        </div>
+
+        <div class="item-card">
+            <div>
+                <div class="item-name">🍧 豆花 $45</div>
+                <div class="item-stock">剩餘: <span id="stk-tofu">200</span></div>
+            </div>
+            <div class="counter-group">
+                <button class="btn-round" onclick="changeQty('tofu', -1)">-</button>
+                <div class="qty-display" id="qty-tofu">0</div>
+                <button class="btn-round btn-plus" onclick="changeQty('tofu', 1)">+</button>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div class="total-box"><span>總金額</span><span id="total-price">$0</span></div>
+            <button class="btn-checkout" onclick="openConfirm()">確認結帳</button>
+        </div>
+    </div>
+
+    <div id="view-k-noodle" style="display:none;">
+        <h2 style="color:var(--noodle); text-align:center;">🍜 炒泡麵待作區</h2>
+        <div id="list-noodle"></div>
+    </div>
+
+    <div id="view-k-tofu" style="display:none;">
+        <h2 style="color:var(--tofu); text-align:center;">🍧 豆花待作區</h2>
+        <div id="list-tofu"></div>
+    </div>
+</div>
+
+<div id="confirmModal" class="modal">
+    <div class="modal-content">
+        <h3>確認收錢</h3>
+        <p id="modal-detail" style="font-size: 1.2rem;"></p>
+        <div style="display:flex; gap:10px;">
+            <button onclick="closeConfirm()" style="flex:1; padding:10px;">取消</button>
+            <button onclick="submitOrder()" style="flex:1; padding:10px; background:var(--secondary); color:white; border:none; border-radius:5px;">已收錢，送出</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 初始化
+    const STORAGE_KEYS = { noodle: 'stk_noodle', tofu: 'stk_tofu', orders: 'campus_orders' };
+    if (!localStorage.getItem(STORAGE_KEYS.noodle)) localStorage.setItem(STORAGE_KEYS.noodle, 200);
+    if (!localStorage.getItem(STORAGE_KEYS.tofu)) localStorage.setItem(STORAGE_KEYS.tofu, 200);
+    if (!localStorage.getItem(STORAGE_KEYS.orders)) localStorage.setItem(STORAGE_KEYS.orders, '[]');
+
+    let cart = { noodle: 0, tofu: 0 };
+
+    function switchMode(mode) {
+        ['view-cashier', 'view-k-noodle', 'view-k-tofu'].forEach(id => document.getElementById(id).style.display = 'none');
+        ['nav-cashier', 'nav-k-noodle', 'nav-k-tofu'].forEach(id => document.getElementById(id).classList.remove('active'));
+        
+        document.getElementById('view-' + mode).style.display = 'block';
+        document.getElementById('nav-' + mode).classList.add('active');
+        
+        if (mode.startsWith('k-')) renderKitchen();
+        updateStockUI();
+    }
+
+    function changeQty(item, delta) {
+        let newQty = cart[item] + delta;
+        if (newQty >= 0 && newQty <= 9) {
+            cart[item] = newQty;
+            document.getElementById('qty-' + item).innerText = newQty;
+            calculate();
+        }
+    }
+
+    function calculate() {
+        let combo = Math.min(cart.noodle, cart.tofu);
+        let total = (combo * 100) + ((cart.noodle - combo) * 65) + ((cart.tofu - combo) * 45);
+        document.getElementById('total-price').innerText = '$' + total;
+        return total;
+    }
+
+    function openConfirm() {
+        if (cart.noodle === 0 && cart.tofu === 0) return;
+        document.getElementById('modal-detail').innerHTML = `麵 x ${cart.noodle}<br>豆花 x ${cart.tofu}<br><b>應收：${calculate()} 元</b>`;
+        document.getElementById('confirmModal').style.display = 'flex';
+    }
+
+    function closeConfirm() { document.getElementById('confirmModal').style.display = 'none'; }
+
+    function submitOrder() {
+        // 扣庫存
+        localStorage.setItem(STORAGE_KEYS.noodle, parseInt(localStorage.getItem(STORAGE_KEYS.noodle)) - cart.noodle);
+        localStorage.setItem(STORAGE_KEYS.tofu, parseInt(localStorage.getItem(STORAGE_KEYS.tofu)) - cart.tofu);
+
+        // 分開存入訂單 (如果數量 > 0 才發給該區)
+        let allOrders = JSON.parse(localStorage.getItem(STORAGE_KEYS.orders));
+        let timestamp = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        let orderID = Date.now().toString().slice(-4);
+
+        if (cart.noodle > 0) allOrders.push({ id: orderID, type: 'noodle', qty: cart.noodle, time: timestamp });
+        if (cart.tofu > 0) allOrders.push({ id: orderID, type: 'tofu', qty: cart.tofu, time: timestamp });
+
+        localStorage.setItem(STORAGE_KEYS.orders, JSON.stringify(allOrders));
+
+        // 重設
+        cart = { noodle: 0, tofu: 0 };
+        document.getElementById('qty-noodle').innerText = 0;
+        document.getElementById('qty-tofu').innerText = 0;
+        calculate();
+        closeConfirm();
+        updateStockUI();
+    }
+
+    function renderKitchen() {
+        let orders = JSON.parse(localStorage.getItem(STORAGE_KEYS.orders));
+        let nList = document.getElementById('list-noodle');
+        let tList = document.getElementById('list-tofu');
+        nList.innerHTML = ""; tList.innerHTML = "";
+
+        orders.forEach((ord, idx) => {
+            let card = document.createElement('div');
+            card.className = `order-ticket ${ord.type}-ticket`;
+            card.innerHTML = `
+                <div class="ticket-header"><span>單號 #${ord.id}</span><span>${ord.time}</span></div>
+                <div class="ticket-content">${ord.type === 'noodle' ? '🍜 炒泡麵' : '🍧 豆花'} x ${ord.qty}</div>
+                <button class="btn-done" onclick="completeOrder(${idx})">製作完成</button>
+            `;
+            if (ord.type === 'noodle') nList.appendChild(card);
+            else tList.appendChild(card);
+        });
+    }
+
+    function completeOrder(idx) {
+        let orders = JSON.parse(localStorage.getItem(STORAGE_KEYS.orders));
+        orders.splice(idx, 1);
+        localStorage.setItem(STORAGE_KEYS.orders, JSON.stringify(orders));
+        renderKitchen();
+    }
+
+    function updateStockUI() {
+        document.getElementById('stk-noodle').innerText = localStorage.getItem(STORAGE_KEYS.noodle);
+        document.getElementById('stk-tofu').innerText = localStorage.getItem(STORAGE_KEYS.tofu);
+    }
+
+    window.addEventListener('storage', () => {
+        renderKitchen();
+        updateStockUI();
+    });
+
+    updateStockUI();
+</script>
+</body>
+</html>
