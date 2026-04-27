@@ -3,19 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>校慶 POS - 安全防護版</title>
+    <title>校慶 POS - 音效加強版</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
         :root { --primary: #3498db; --secondary: #2ecc71; --accent: #e67e22; --danger: #e74c3c; --noodle: #f39c12; --tofu: #9b59b6; }
         body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 10px; }
-        /* 密碼登入頁 */
         #login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 90vh; }
         .login-input { padding: 15px; font-size: 1.2rem; border-radius: 8px; border: 1px solid #ccc; width: 200px; text-align: center; margin-bottom: 15px; }
-        
-        /* 主程式內容 */
         #main-content { display: none; } 
-        
         .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); min-height: 90vh; }
         .mode-nav { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 20px; }
         .mode-nav button { padding: 12px 5px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; background: #eee; }
@@ -25,23 +21,27 @@
         .order-ticket { padding: 15px; margin-bottom: 12px; border-radius: 10px; color: white; position: relative; }
         .noodle-ticket { background: var(--noodle); }
         .tofu-ticket { background: var(--tofu); }
-        .btn-done { width: 100%; margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.3); border: 1px solid white; color: white; border-radius: 5px; }
+        .btn-done { width: 100%; margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.3); border: 1px solid white; color: white; border-radius: 5px; cursor: pointer; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 100; }
         .modal-content { background: white; padding: 25px; border-radius: 15px; text-align: center; width: 80%; }
-        .status-dot { font-size: 0.8rem; text-align: center; margin-bottom: 10px; color: #7f8c8d; cursor: default; }
+        .status-dot { font-size: 0.8rem; text-align: center; margin-bottom: 10px; color: #7f8c8d; }
+        /* 音效提醒按鈕 */
+        #audio-tip { background: #fff3cd; color: #856404; padding: 10px; border-radius: 8px; font-size: 0.8rem; margin-bottom: 10px; text-align: center; cursor: pointer; border: 1px solid #ffeeba; }
     </style>
 </head>
 <body>
 
 <div id="login-screen">
     <h2>🔒 請輸入通行碼</h2>
-    <input type="password" id="pass-input" class="login-input" placeholder="請輸入密碼">
+    <input type="password" id="pass-input" class="login-input" placeholder="預設 123">
     <button onclick="checkPass()" style="padding:10px 40px; background:var(--primary); color:white; border:none; border-radius:5px; font-weight:bold;">登入</button>
 </div>
 
 <div id="main-content">
     <div class="container">
-        <div class="status-dot" id="conn-status" onclick="handleResetSecret()">📡 正在連線至 Firebase...</div>
+        <div id="audio-tip" onclick="enableAudio()">📣 點擊此處「開啟音效提醒」 (避免手機靜音)</div>
+        <div class="status-dot" id="conn-status" onclick="handleResetSecret()">📡 正在連線...</div>
+        
         <div class="mode-nav">
             <button id="nav-cashier" onclick="switchMode('cashier')" class="active">💰 收銀</button>
             <button id="nav-k-noodle" onclick="switchMode('k-noodle')">🍜 麵區</button>
@@ -84,7 +84,6 @@
 </div>
 
 <script>
-    // Firebase 設定 (使用你的專案資訊)
     const firebaseConfig = {
         apiKey: "AIzaSyDTqa6YKnXOSeuMkxcOVWK7cC8orklePGU",
         authDomain: "school-faee6.firebaseapp.com",
@@ -98,60 +97,60 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
+    // 音效檔案路徑 (使用網路上公開的短音效)
+    const soundOrder = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'); // 叮咚
+    const soundDone = new Audio('https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3');  // 啵
+
     let cart = { noodle: 0, tofu: 0 };
     let currentStock = { noodle: 200, tofu: 200 };
     let resetClicks = 0;
+    let firstLoad = true;
+    let currentMode = 'cashier';
 
-    // 密碼檢查
+    function enableAudio() {
+        // 瀏覽器要求必須有使用者互動才能放聲音
+        soundOrder.play().then(() => {
+            soundOrder.pause();
+            document.getElementById('audio-tip').style.display = 'none';
+            alert("音效提醒已開啟！");
+        });
+    }
+
     function checkPass() {
         if (document.getElementById('pass-input').value === '123') {
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('main-content').style.display = 'block';
             startApp();
-        } else {
-            alert('密碼錯誤！');
-        }
+        } else { alert('密碼錯誤！'); }
     }
 
     function startApp() {
-        db.ref('stock').on('value', (snapshot) => {
-            const data = snapshot.val();
+        db.ref('stock').on('value', (s) => {
+            const data = s.val();
             if (data) {
                 currentStock = data;
                 document.getElementById('stk-noodle').innerText = data.noodle;
                 document.getElementById('stk-tofu').innerText = data.tofu;
-            } else {
-                db.ref('stock').set({ noodle: 200, tofu: 200 });
-            }
+            } else { db.ref('stock').set({ noodle: 200, tofu: 200 }); }
         });
 
         db.ref('orders').on('value', (snapshot) => {
             const orders = [];
             snapshot.forEach(child => { orders.push({ key: child.key, ...child.val() }); });
+            
+            // 如果不是第一次讀取，且訂單數量增加，就響鈴 (只限內場模式)
+            if (!firstLoad && currentMode !== 'cashier') {
+                soundOrder.play().catch(e => console.log("等待使用者點擊開啟音效"));
+            }
+            firstLoad = false;
+            
             renderKitchen(orders);
             document.getElementById('conn-status').innerText = "🟢 雲端同步中";
         });
     }
 
-    function handleResetSecret() {
-        resetClicks++;
-        if (resetClicks >= 5) {
-            const pw = prompt("請輸入管理員密碼以重製數據：");
-            if (pw === '123') {
-                if (confirm("確定要清空所有訂單並恢復庫存為 200 嗎？")) {
-                    db.ref('orders').remove();
-                    db.ref('stock').set({ noodle: 200, tofu: 200 });
-                    alert("重製成功！");
-                }
-            } else if (pw !== null) {
-                alert("密碼錯誤！");
-            }
-            resetClicks = 0;
-        }
-    }
-
-    // 以下為原有的功能逻辑
     function switchMode(mode) {
+        currentMode = mode;
         ['view-cashier', 'view-k-noodle', 'view-k-tofu'].forEach(id => document.getElementById(id).style.display = 'none');
         ['nav-cashier', 'nav-k-noodle', 'nav-k-tofu'].forEach(id => document.getElementById(id).classList.remove('active'));
         document.getElementById('view-' + mode).style.display = 'block';
@@ -199,12 +198,15 @@
         const tList = document.getElementById('list-tofu');
         nList.innerHTML = ""; tList.innerHTML = "";
         orders.forEach(ord => {
-            if (ord.noodle > 0) nList.innerHTML += `<div class="order-ticket noodle-ticket">#${ord.id} [${ord.time}]<br><b>🍜 麵 x ${ord.noodle}</b><button class="btn-done" onclick="completeOrder('${ord.key}', 'noodle')">完成</button></div>`;
-            if (ord.tofu > 0) tList.innerHTML += `<div class="order-ticket tofu-ticket">#${ord.id} [${ord.time}]<br><b>🍧 豆花 x ${ord.tofu}</b><button class="btn-done" onclick="completeOrder('${ord.key}', 'tofu')">完成</button></div>`;
+            if (ord.noodle > 0) nList.innerHTML += `<div class="order-ticket noodle-ticket">#${ord.id} [${ord.time}]<br><b>🍜 麵 x ${ord.noodle}</b><button class="btn-done" onclick="completeOrder('${ord.key}', 'noodle')">製作完成</button></div>`;
+            if (ord.tofu > 0) tList.innerHTML += `<div class="order-ticket tofu-ticket">#${ord.id} [${ord.time}]<br><b>🍧 豆花 x ${ord.tofu}</b><button class="btn-done" onclick="completeOrder('${ord.key}', 'tofu')">製作完成</button></div>`;
         });
     }
 
     function completeOrder(key, type) {
+        // 播放完成音效
+        soundDone.play().catch(e => {});
+        
         db.ref('orders/' + key).once('value', s => {
             const v = s.val(); if (!v) return;
             const up = {}; up[type] = 0;
@@ -214,6 +216,19 @@
                 });
             });
         });
+    }
+
+    function handleResetSecret() {
+        resetClicks++;
+        if (resetClicks >= 5) {
+            const pw = prompt("管理密碼：");
+            if (pw === '123') {
+                db.ref('orders').remove();
+                db.ref('stock').set({ noodle: 200, tofu: 200 });
+                alert("已全部重製！");
+            }
+            resetClicks = 0;
+        }
     }
 </script>
 </body>
