@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>校慶 POS - 編號優化版</title>
+    <title>校慶 POS - 編號絕對準確版</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
@@ -105,7 +105,6 @@
 
     let cart = { noodle: 0, tofu: 0 };
     let currentStock = { noodle: 200, tofu: 200 };
-    let orderNum = 0; // 當前流水號
     let lastOrderIds = new Set();
     let firstLoad = true;
     let currentMode = 'cashier';
@@ -124,10 +123,6 @@
     }
 
     function startApp() {
-        // 監聽流水號
-        db.ref('orderCount').on('value', s => { orderNum = s.val() || 0; });
-
-        // 監聽庫存
         db.ref('stock').on('value', s => {
             const data = s.val();
             if (data) {
@@ -137,7 +132,6 @@
             } else { db.ref('stock').set({ noodle: 200, tofu: 200 }); }
         });
 
-        // 監聽訂單
         db.ref('orders').on('value', (snapshot) => {
             const orders = [];
             let hasNewOrder = false;
@@ -202,22 +196,40 @@
 
     function closeConfirm() { document.getElementById('confirmModal').style.display = 'none'; }
 
+    // --- 核心修正：使用 Transaction 確保流水號絕對正確 ---
     function submitOrder() {
-        // 更新號碼並格式化為 #0001
-        const nextNum = orderNum + 1;
-        const formattedId = nextNum.toString().padStart(4, '0');
         const timestamp = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
+        // 1. 先跑流水號事務
+        db.ref('orderCount').transaction((current) => {
+            return (current || 0) + 1;
+        }, (error, committed, snapshot) => {
+            if (committed) {
+                const nextNum = snapshot.val();
+                const formattedId = nextNum.toString().padStart(4, '0'); // #0001
+                
+                // 2. 拿到正確號碼後才推播訂單
+                db.ref('orders').push({ 
+                    id: formattedId, 
+                    noodle: cart.noodle, 
+                    tofu: cart.tofu, 
+                    time: timestamp 
+                });
+                
+                // 3. 扣庫存
+                db.ref('stock').set({ 
+                    noodle: currentStock.noodle - cart.noodle, 
+                    tofu: currentStock.tofu - cart.tofu 
+                });
 
-        // 同步到 Firebase
-        db.ref('orderCount').set(nextNum);
-        db.ref('orders').push({ id: formattedId, noodle: cart.noodle, tofu: cart.tofu, time: timestamp });
-        db.ref('stock').set({ noodle: currentStock.noodle - cart.noodle, tofu: currentStock.tofu - cart.tofu });
-
-        cart = { noodle: 0, tofu: 0 };
-        document.getElementById('qty-noodle').innerText = '0';
-        document.getElementById('qty-tofu').innerText = '0';
-        calculate();
-        closeConfirm();
+                // 清空購物車
+                cart = { noodle: 0, tofu: 0 };
+                document.getElementById('qty-noodle').innerText = '0';
+                document.getElementById('qty-tofu').innerText = '0';
+                calculate();
+                closeConfirm();
+            }
+        });
     }
 
     function renderKitchen(orders) {
@@ -249,8 +261,8 @@
             if (pw === '123') {
                 db.ref('orders').remove();
                 db.ref('stock').set({ noodle: 200, tofu: 200 });
-                db.ref('orderCount').set(0); // 號碼歸零
-                alert("已全部重製！編號將從 #0001 開始");
+                db.ref('orderCount').set(0); 
+                alert("已全部重製！編號從 #0001 開始");
             }
             window.r_clicks = 0;
         }
@@ -258,3 +270,4 @@
 </script>
 </body>
 </html>
+
