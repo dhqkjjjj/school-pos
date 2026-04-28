@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>校慶 POS - 叮一聲版</title>
+    <title>校慶 POS - 編號優化版</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
@@ -70,8 +70,8 @@
             <button onclick="openConfirm()" style="width:100%; padding:18px; background:var(--secondary); color:white; border:none; border-radius:10px; font-size:1.2rem; font-weight:bold;">確認結帳送單</button>
         </div>
 
-        <div id="view-k-noodle" style="display:none;"><h2>🍜 麵區待作 (先來在上)</h2><div id="list-noodle"></div></div>
-        <div id="view-k-tofu" style="display:none;"><h2>🍧 豆花待作 (先來在上)</h2><div id="list-tofu"></div></div>
+        <div id="view-k-noodle" style="display:none;"><h2>🍜 麵區待作</h2><div id="list-noodle"></div></div>
+        <div id="view-k-tofu" style="display:none;"><h2>🍧 豆花待作</h2><div id="list-tofu"></div></div>
     </div>
 </div>
 
@@ -80,9 +80,7 @@
         <h3 style="margin-top:0;">💰 結帳找錢幫手</h3>
         <p id="modal-detail" style="font-size:1.1rem; margin-bottom:10px;"></p>
         <div style="background:#f9f9f9; padding:15px; border-radius:10px;">
-            <div style="font-size:0.9rem; color:gray;">對方付了多少錢？</div>
-            <input type="number" id="cash-received" class="calc-input" placeholder="輸入金額" oninput="calculateChange()">
-            <div style="font-size:0.9rem; color:gray;">應找零：</div>
+            <input type="number" id="cash-received" class="calc-input" placeholder="對方付了多少" oninput="calculateChange()">
             <div id="change-amount" class="change-result">$0</div>
         </div>
         <button onclick="submitOrder()" style="width:100%; padding:15px; background:var(--secondary); color:white; border:none; border-radius:8px; margin-top:15px; font-size:1.1rem; font-weight:bold;">確認收錢並送單</button>
@@ -103,23 +101,18 @@
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-    
-    // 更換為更短的「叮」一聲
     const soundOrder = new Audio('https://assets.mixkit.co/active_storage/sfx/3005/3005-preview.mp3');
 
     let cart = { noodle: 0, tofu: 0 };
     let currentStock = { noodle: 200, tofu: 200 };
-    let resetClicks = 0;
-    let lastOrderIds = new Set(); // 記錄已經處理過的訂單 ID
+    let orderNum = 0; // 當前流水號
+    let lastOrderIds = new Set();
     let firstLoad = true;
     let currentMode = 'cashier';
     let currentTotal = 0;
 
     function enableAudio() {
-        soundOrder.play().then(() => {
-            soundOrder.pause();
-            document.getElementById('audio-tip').style.display = 'none';
-        });
+        soundOrder.play().then(() => { soundOrder.pause(); document.getElementById('audio-tip').style.display = 'none'; });
     }
 
     function checkPass() {
@@ -131,7 +124,11 @@
     }
 
     function startApp() {
-        db.ref('stock').on('value', (s) => {
+        // 監聽流水號
+        db.ref('orderCount').on('value', s => { orderNum = s.val() || 0; });
+
+        // 監聽庫存
+        db.ref('stock').on('value', s => {
             const data = s.val();
             if (data) {
                 currentStock = data;
@@ -140,29 +137,20 @@
             } else { db.ref('stock').set({ noodle: 200, tofu: 200 }); }
         });
 
+        // 監聽訂單
         db.ref('orders').on('value', (snapshot) => {
             const orders = [];
             let hasNewOrder = false;
-            
             snapshot.forEach(child => { 
                 const key = child.key;
                 orders.push({ key: key, ...child.val() }); 
-                
-                // 如果這個 Key 沒看過，代表是真正的新單
-                if (!lastOrderIds.has(key)) {
-                    hasNewOrder = true;
-                }
+                if (!lastOrderIds.has(key)) hasNewOrder = true;
             });
-
-            // 更新現有的 ID 清單
             lastOrderIds = new Set(orders.map(o => o.key));
-
-            // 只有「真的有新 Key」且「非第一次載入」且「在內場」才響鈴
             if (!firstLoad && hasNewOrder && currentMode !== 'cashier') {
-                soundOrder.currentTime = 0; // 重置聲音到頭
+                soundOrder.currentTime = 0;
                 soundOrder.play().catch(e => {});
             }
-            
             firstLoad = false;
             renderKitchen(orders);
             document.getElementById('conn-status').innerText = "🟢 雲端同步中";
@@ -195,7 +183,7 @@
 
     function openConfirm() {
         if (cart.noodle === 0 && cart.tofu === 0) return;
-        document.getElementById('modal-detail').innerHTML = `炒泡麵 x ${cart.noodle} / 豆花 x ${cart.tofu}<br><b>總計：${currentTotal} 元</b>`;
+        document.getElementById('modal-detail').innerHTML = `麵 x ${cart.noodle} / 豆花 x ${cart.tofu}<br><b>總計：${currentTotal} 元</b>`;
         document.getElementById('cash-received').value = ""; 
         document.getElementById('change-amount').innerText = "$0";
         document.getElementById('confirmModal').style.display = 'flex';
@@ -215,10 +203,16 @@
     function closeConfirm() { document.getElementById('confirmModal').style.display = 'none'; }
 
     function submitOrder() {
-        const orderId = Date.now().toString().slice(-4);
+        // 更新號碼並格式化為 #0001
+        const nextNum = orderNum + 1;
+        const formattedId = nextNum.toString().padStart(4, '0');
         const timestamp = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        db.ref('orders').push({ id: orderId, noodle: cart.noodle, tofu: cart.tofu, time: timestamp });
+
+        // 同步到 Firebase
+        db.ref('orderCount').set(nextNum);
+        db.ref('orders').push({ id: formattedId, noodle: cart.noodle, tofu: cart.tofu, time: timestamp });
         db.ref('stock').set({ noodle: currentStock.noodle - cart.noodle, tofu: currentStock.tofu - cart.tofu });
+
         cart = { noodle: 0, tofu: 0 };
         document.getElementById('qty-noodle').innerText = '0';
         document.getElementById('qty-tofu').innerText = '0';
@@ -249,15 +243,16 @@
     }
 
     function handleResetSecret() {
-        resetClicks++;
+        let resetClicks = (window.r_clicks || 0) + 1; window.r_clicks = resetClicks;
         if (resetClicks >= 5) {
             const pw = prompt("管理密碼：");
             if (pw === '123') {
                 db.ref('orders').remove();
                 db.ref('stock').set({ noodle: 200, tofu: 200 });
-                alert("已重製！");
+                db.ref('orderCount').set(0); // 號碼歸零
+                alert("已全部重製！編號將從 #0001 開始");
             }
-            resetClicks = 0;
+            window.r_clicks = 0;
         }
     }
 </script>
