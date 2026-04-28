@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>校慶 POS - 音效加強版</title>
+    <title>校慶 POS - 功能完善版</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
@@ -23,10 +23,13 @@
         .tofu-ticket { background: var(--tofu); }
         .btn-done { width: 100%; margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.3); border: 1px solid white; color: white; border-radius: 5px; cursor: pointer; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 100; }
-        .modal-content { background: white; padding: 25px; border-radius: 15px; text-align: center; width: 80%; }
+        .modal-content { background: white; padding: 25px; border-radius: 15px; text-align: center; width: 85%; }
         .status-dot { font-size: 0.8rem; text-align: center; margin-bottom: 10px; color: #7f8c8d; }
-        /* 音效提醒按鈕 */
         #audio-tip { background: #fff3cd; color: #856404; padding: 10px; border-radius: 8px; font-size: 0.8rem; margin-bottom: 10px; text-align: center; cursor: pointer; border: 1px solid #ffeeba; }
+        
+        /* 找錢小幫手樣式 */
+        .calc-input { width: 100%; padding: 10px; font-size: 1.5rem; margin: 10px 0; border: 2px solid #eee; border-radius: 8px; text-align: center; box-sizing: border-box; }
+        .change-result { font-size: 1.8rem; color: var(--danger); font-weight: bold; margin: 10px 0; }
     </style>
 </head>
 <body>
@@ -39,7 +42,7 @@
 
 <div id="main-content">
     <div class="container">
-        <div id="audio-tip" onclick="enableAudio()">📣 點擊此處「開啟音效提醒」 (避免手機靜音)</div>
+        <div id="audio-tip" onclick="enableAudio()">📣 點擊開啟音效提醒</div>
         <div class="status-dot" id="conn-status" onclick="handleResetSecret()">📡 正在連線...</div>
         
         <div class="mode-nav">
@@ -66,20 +69,28 @@
                 </div>
             </div>
             <div style="text-align:right; font-size:1.5rem; font-weight:bold; margin-bottom:15px; color:var(--danger);">總計: <span id="total-price">$0</span></div>
-            <button onclick="openConfirm()" style="width:100%; padding:18px; background:var(--secondary); color:white; border:none; border-radius:10px; font-size:1.2rem; font-weight:bold;">確認收錢送單</button>
+            <button onclick="openConfirm()" style="width:100%; padding:18px; background:var(--secondary); color:white; border:none; border-radius:10px; font-size:1.2rem; font-weight:bold;">確認結帳送單</button>
         </div>
 
-        <div id="view-k-noodle" style="display:none;"><h2>🍜 麵區待作</h2><div id="list-noodle"></div></div>
-        <div id="view-k-tofu" style="display:none;"><h2>🍧 豆花待作</h2><div id="list-tofu"></div></div>
+        <div id="view-k-noodle" style="display:none;"><h2>🍜 麵區待作 (先來在上)</h2><div id="list-noodle"></div></div>
+        <div id="view-k-tofu" style="display:none;"><h2>🍧 豆花待作 (先來在上)</h2><div id="list-tofu"></div></div>
     </div>
 </div>
 
 <div id="confirmModal" class="modal">
     <div class="modal-content">
-        <h3>確認訂單</h3>
-        <p id="modal-detail"></p>
-        <button onclick="submitOrder()" style="width:100%; padding:15px; background:var(--secondary); color:white; border:none; border-radius:5px;">確認送出</button>
-        <button onclick="closeConfirm()" style="width:100%; margin-top:10px; border:none; background:none; color:gray;">取消</button>
+        <h3 style="margin-top:0;">💰 結帳找錢幫手</h3>
+        <p id="modal-detail" style="font-size:1.1rem; margin-bottom:10px;"></p>
+        
+        <div style="background:#f9f9f9; padding:15px; border-radius:10px;">
+            <div style="font-size:0.9rem; color:gray;">對方付了多少錢？</div>
+            <input type="number" id="cash-received" class="calc-input" placeholder="輸入金額" oninput="calculateChange()">
+            <div style="font-size:0.9rem; color:gray;">應找零：</div>
+            <div id="change-amount" class="change-result">$0</div>
+        </div>
+
+        <button id="btn-submit" onclick="submitOrder()" style="width:100%; padding:15px; background:var(--secondary); color:white; border:none; border-radius:8px; margin-top:15px; font-size:1.1rem; font-weight:bold;">確認收錢並送單</button>
+        <button onclick="closeConfirm()" style="width:100%; margin-top:10px; border:none; background:none; color:gray;">返回修改</button>
     </div>
 </div>
 
@@ -97,22 +108,20 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // 音效檔案路徑 (使用網路上公開的短音效)
-    const soundOrder = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'); // 叮咚
-    const soundDone = new Audio('https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3');  // 啵
+    const soundOrder = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+    const soundDone = new Audio('https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3');
 
     let cart = { noodle: 0, tofu: 0 };
     let currentStock = { noodle: 200, tofu: 200 };
     let resetClicks = 0;
     let firstLoad = true;
     let currentMode = 'cashier';
+    let currentTotal = 0;
 
     function enableAudio() {
-        // 瀏覽器要求必須有使用者互動才能放聲音
         soundOrder.play().then(() => {
             soundOrder.pause();
             document.getElementById('audio-tip').style.display = 'none';
-            alert("音效提醒已開啟！");
         });
     }
 
@@ -138,12 +147,11 @@
             const orders = [];
             snapshot.forEach(child => { orders.push({ key: child.key, ...child.val() }); });
             
-            // 如果不是第一次讀取，且訂單數量增加，就響鈴 (只限內場模式)
+            // 排序：Firebase key 預設即按時間排序。我們直接 render 即可。
             if (!firstLoad && currentMode !== 'cashier') {
-                soundOrder.play().catch(e => console.log("等待使用者點擊開啟音效"));
+                soundOrder.play().catch(e => {});
             }
             firstLoad = false;
-            
             renderKitchen(orders);
             document.getElementById('conn-status').innerText = "🟢 雲端同步中";
         });
@@ -168,15 +176,28 @@
 
     function calculate() {
         let combo = Math.min(cart.noodle, cart.tofu);
-        let total = (combo * 100) + ((cart.noodle - combo) * 65) + ((cart.tofu - combo) * 45);
-        document.getElementById('total-price').innerText = '$' + total;
-        return total;
+        currentTotal = (combo * 100) + ((cart.noodle - combo) * 65) + ((cart.tofu - combo) * 45);
+        document.getElementById('total-price').innerText = '$' + currentTotal;
+        return currentTotal;
     }
 
     function openConfirm() {
         if (cart.noodle === 0 && cart.tofu === 0) return;
-        document.getElementById('modal-detail').innerHTML = `麵 x ${cart.noodle}, 豆花 x ${cart.tofu}<br><b>總金額：${calculate()} 元</b>`;
+        document.getElementById('modal-detail').innerHTML = `炒泡麵 x ${cart.noodle} / 豆花 x ${cart.tofu}<br><b>總計：${currentTotal} 元</b>`;
+        document.getElementById('cash-received').value = ""; 
+        document.getElementById('change-amount').innerText = "$0";
         document.getElementById('confirmModal').style.display = 'flex';
+    }
+
+    function calculateChange() {
+        const received = document.getElementById('cash-received').value;
+        if (received >= currentTotal) {
+            document.getElementById('change-amount').innerText = "$" + (received - currentTotal);
+            document.getElementById('change-amount').style.color = "var(--secondary)";
+        } else {
+            document.getElementById('change-amount').innerText = "不足";
+            document.getElementById('change-amount').style.color = "var(--danger)";
+        }
     }
 
     function closeConfirm() { document.getElementById('confirmModal').style.display = 'none'; }
@@ -186,6 +207,7 @@
         const timestamp = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         db.ref('orders').push({ id: orderId, noodle: cart.noodle, tofu: cart.tofu, time: timestamp });
         db.ref('stock').set({ noodle: currentStock.noodle - cart.noodle, tofu: currentStock.tofu - cart.tofu });
+        
         cart = { noodle: 0, tofu: 0 };
         document.getElementById('qty-noodle').innerText = '0';
         document.getElementById('qty-tofu').innerText = '0';
@@ -197,6 +219,10 @@
         const nList = document.getElementById('list-noodle');
         const tList = document.getElementById('list-tofu');
         nList.innerHTML = ""; tList.innerHTML = "";
+        
+        // 訂單排序說明：
+        // Firebase 預設 push 是依時間產生的 Key，
+        // 這裡直接照順序讀取渲染，就是「先來的在上面」。
         orders.forEach(ord => {
             if (ord.noodle > 0) nList.innerHTML += `<div class="order-ticket noodle-ticket">#${ord.id} [${ord.time}]<br><b>🍜 麵 x ${ord.noodle}</b><button class="btn-done" onclick="completeOrder('${ord.key}', 'noodle')">製作完成</button></div>`;
             if (ord.tofu > 0) tList.innerHTML += `<div class="order-ticket tofu-ticket">#${ord.id} [${ord.time}]<br><b>🍧 豆花 x ${ord.tofu}</b><button class="btn-done" onclick="completeOrder('${ord.key}', 'tofu')">製作完成</button></div>`;
@@ -204,9 +230,7 @@
     }
 
     function completeOrder(key, type) {
-        // 播放完成音效
         soundDone.play().catch(e => {});
-        
         db.ref('orders/' + key).once('value', s => {
             const v = s.val(); if (!v) return;
             const up = {}; up[type] = 0;
@@ -225,7 +249,7 @@
             if (pw === '123') {
                 db.ref('orders').remove();
                 db.ref('stock').set({ noodle: 200, tofu: 200 });
-                alert("已全部重製！");
+                alert("數據已重製！");
             }
             resetClicks = 0;
         }
