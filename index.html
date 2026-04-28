@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>校慶 POS - 最終除錯版</title>
+    <title>校慶 POS - 叮一聲版</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
@@ -18,7 +18,7 @@
         .mode-nav .active { background: var(--primary); color: white; }
         .item-card { border: 2px solid #f0f0f0; border-radius: 12px; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
         .btn-round { width: 40px; height: 40px; border-radius: 50%; border: none; font-size: 1.5rem; cursor: pointer; background: #eee; }
-        .order-ticket { padding: 15px; margin-bottom: 12px; border-radius: 10px; color: white; position: relative; }
+        .order-ticket { padding: 15px; margin-bottom: 12px; border-radius: 10px; color: white; }
         .noodle-ticket { background: var(--noodle); }
         .tofu-ticket { background: var(--tofu); }
         .btn-done { width: 100%; margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.3); border: 1px solid white; color: white; border-radius: 5px; cursor: pointer; }
@@ -34,13 +34,13 @@
 
 <div id="login-screen">
     <h2>🔒 請輸入通行碼</h2>
-    <input type="password" id="pass-input" class="login-input" placeholder="預設 123">
+    <input type="password" id="pass-input" class="login-input" placeholder="123">
     <button onclick="checkPass()" style="padding:10px 40px; background:var(--primary); color:white; border:none; border-radius:5px; font-weight:bold;">登入</button>
 </div>
 
 <div id="main-content">
     <div class="container">
-        <div id="audio-tip" onclick="enableAudio()">📣 點擊開啟訂單音效 (叮咚)</div>
+        <div id="audio-tip" onclick="enableAudio()">📣 點擊開啟訂單音效 (叮)</div>
         <div class="status-dot" id="conn-status" onclick="handleResetSecret()">📡 正在連線...</div>
         
         <div class="mode-nav">
@@ -103,12 +103,15 @@
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-    const soundOrder = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+    
+    // 更換為更短的「叮」一聲
+    const soundOrder = new Audio('https://assets.mixkit.co/active_storage/sfx/3005/3005-preview.mp3');
 
     let cart = { noodle: 0, tofu: 0 };
     let currentStock = { noodle: 200, tofu: 200 };
     let resetClicks = 0;
-    let lastOrderCount = 0; // 用來記錄上一次的訂單總數
+    let lastOrderIds = new Set(); // 記錄已經處理過的訂單 ID
+    let firstLoad = true;
     let currentMode = 'cashier';
     let currentTotal = 0;
 
@@ -139,14 +142,28 @@
 
         db.ref('orders').on('value', (snapshot) => {
             const orders = [];
-            snapshot.forEach(child => { orders.push({ key: child.key, ...child.val() }); });
+            let hasNewOrder = false;
             
-            // --- 核心修正：只有當訂單「增加」時才響鈴 ---
-            if (orders.length > lastOrderCount && currentMode !== 'cashier') {
+            snapshot.forEach(child => { 
+                const key = child.key;
+                orders.push({ key: key, ...child.val() }); 
+                
+                // 如果這個 Key 沒看過，代表是真正的新單
+                if (!lastOrderIds.has(key)) {
+                    hasNewOrder = true;
+                }
+            });
+
+            // 更新現有的 ID 清單
+            lastOrderIds = new Set(orders.map(o => o.key));
+
+            // 只有「真的有新 Key」且「非第一次載入」且「在內場」才響鈴
+            if (!firstLoad && hasNewOrder && currentMode !== 'cashier') {
+                soundOrder.currentTime = 0; // 重置聲音到頭
                 soundOrder.play().catch(e => {});
             }
-            lastOrderCount = orders.length; // 更新計數器
             
+            firstLoad = false;
             renderKitchen(orders);
             document.getElementById('conn-status').innerText = "🟢 雲端同步中";
         });
@@ -238,8 +255,7 @@
             if (pw === '123') {
                 db.ref('orders').remove();
                 db.ref('stock').set({ noodle: 200, tofu: 200 });
-                alert("數據已重製！");
-                lastOrderCount = 0; // 重製時也要歸零
+                alert("已重製！");
             }
             resetClicks = 0;
         }
@@ -247,4 +263,3 @@
 </script>
 </body>
 </html>
-
