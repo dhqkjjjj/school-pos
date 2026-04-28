@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>校慶 POS - 編號絕對準確版</title>
+    <title>校慶 POS - 完美測試版</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
@@ -34,7 +34,7 @@
 
 <div id="login-screen">
     <h2>🔒 請輸入通行碼</h2>
-    <input type="password" id="pass-input" class="login-input" placeholder="123">
+    <input type="password" id="pass-input" class="login-input" placeholder="預設 123">
     <button onclick="checkPass()" style="padding:10px 40px; background:var(--primary); color:white; border:none; border-radius:5px; font-weight:bold;">登入</button>
 </div>
 
@@ -196,33 +196,16 @@
 
     function closeConfirm() { document.getElementById('confirmModal').style.display = 'none'; }
 
-    // --- 核心修正：使用 Transaction 確保流水號絕對正確 ---
     function submitOrder() {
         const timestamp = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        
-        // 1. 先跑流水號事務
         db.ref('orderCount').transaction((current) => {
             return (current || 0) + 1;
         }, (error, committed, snapshot) => {
             if (committed) {
                 const nextNum = snapshot.val();
-                const formattedId = nextNum.toString().padStart(4, '0'); // #0001
-                
-                // 2. 拿到正確號碼後才推播訂單
-                db.ref('orders').push({ 
-                    id: formattedId, 
-                    noodle: cart.noodle, 
-                    tofu: cart.tofu, 
-                    time: timestamp 
-                });
-                
-                // 3. 扣庫存
-                db.ref('stock').set({ 
-                    noodle: currentStock.noodle - cart.noodle, 
-                    tofu: currentStock.tofu - cart.tofu 
-                });
-
-                // 清空購物車
+                const formattedId = nextNum.toString().padStart(4, '0');
+                db.ref('orders').push({ id: formattedId, noodle: cart.noodle, tofu: cart.tofu, time: timestamp });
+                db.ref('stock').set({ noodle: currentStock.noodle - cart.noodle, tofu: currentStock.tofu - cart.tofu });
                 cart = { noodle: 0, tofu: 0 };
                 document.getElementById('qty-noodle').innerText = '0';
                 document.getElementById('qty-tofu').innerText = '0';
